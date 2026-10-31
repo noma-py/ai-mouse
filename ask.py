@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import urllib.request
 
@@ -33,6 +34,7 @@ def quote(s):
 
 
 def show(text):
+    print("done", flush=True)  # hides "Thinking…" before the answer pops up
     osa(f'display dialog {quote(text)} with title "AI Mouse" buttons {{"OK"}} default button "OK"')
 
 
@@ -76,13 +78,17 @@ def main():
         return
     subprocess.run(["sips", "-Z", "1568", img], check=True, capture_output=True)
 
-    code, out = osa(
-        'text returned of (display dialog "What do you want explained?" '
-        'default answer "" with title "AI Mouse")'
-    )
-    if code != 0:  # user hit Cancel
-        return
-    question = out or "Explain what I'm pointing at."
+    if "--explain" in sys.argv:  # one-press mode: skip the question box
+        question = "Explain what I'm pointing at."
+    else:
+        code, out = osa(
+            'text returned of (display dialog "What do you want explained?" '
+            'default answer "" with title "AI Mouse")'
+        )
+        if code != 0:  # user hit Cancel
+            return
+        question = out or "Explain what I'm pointing at."
+    print("thinking", flush=True)  # the Hammerspoon hotkey shows "Thinking…" when it sees this
 
     if BACKEND == "claude":
         try:

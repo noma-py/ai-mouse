@@ -37,7 +37,7 @@ No extra Python packages are needed.
 
    The first time, macOS asks for **Screen Recording** permission. Allow it in System Settings → Privacy & Security → Screen Recording, then run it again.
 
-3. **Add a hotkey (⌥⌘A) with [Hammerspoon](https://www.hammerspoon.org).** It works in every app, including Chrome and full-screen apps, which the Shortcuts app's hotkeys don't.
+3. **Add hotkeys (⌥⌘A, ⌥⌘E) with [Hammerspoon](https://www.hammerspoon.org).** It works in every app, including Chrome and full-screen apps, which the Shortcuts app's hotkeys don't.
 
    ```sh
    brew install --cask hammerspoon
@@ -46,17 +46,35 @@ No extra Python packages are needed.
    Put this in `~/.hammerspoon/init.lua`, then open Hammerspoon:
 
    ```lua
-   hs.hotkey.bind({"alt", "cmd"}, "A", function()
-     hs.task.new("/Library/Frameworks/Python.framework/Versions/3.13/bin/python3", nil,
-       {os.getenv("HOME") .. "/Desktop/AI_mouse_agent/ask.py"}):start()
-   end)
+   local PYTHON = "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
+   local SCRIPT = os.getenv("HOME") .. "/Desktop/AI_mouse_agent/ask.py"
+
+   local function aiMouse(args)
+     local alert
+     local function hide() if alert then hs.alert.closeSpecific(alert); alert = nil end end
+     hs.task.new(PYTHON, hide,
+       function(_, out)
+         if out:find("done") then hide()
+         elseif out:find("thinking") then alert = hs.alert.show("Thinking…", 300) end
+         return true
+       end,
+       args):start()
+   end
+
+   hs.hotkey.bind({"alt", "cmd"}, "A", function() aiMouse({SCRIPT}) end)
+   hs.hotkey.bind({"alt", "cmd"}, "E", function() aiMouse({SCRIPT, "--explain"}) end)
    ```
 
    (Use the output of `which python3` if your Python is somewhere else.) Give Hammerspoon **Accessibility** and **Screen Recording** permission, and turn on "Launch Hammerspoon at login" in its settings.
 
 ## Usage
 
-Hover over something, press your hotkey, type a question (or leave it empty), and press OK. The answer appears in a popup.
+Hover over something, then:
+
+- **⌥⌘A**: type a question (or leave it empty) and press OK.
+- **⌥⌘E**: skip the question and just explain what you're pointing at.
+
+"Thinking…" shows while the AI works, then the answer appears in a popup.
 
 ## Modes compared
 
