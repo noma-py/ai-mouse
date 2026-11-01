@@ -43,29 +43,13 @@ No extra Python packages are needed.
    brew install --cask hammerspoon
    ```
 
-   Put this in `~/.hammerspoon/init.lua`, then open Hammerspoon:
+   Put this line in `~/.hammerspoon/init.lua`, then open Hammerspoon:
 
    ```lua
-   local PYTHON = "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
-   local SCRIPT = os.getenv("HOME") .. "/Desktop/AI_mouse_agent/ask.py"
-
-   local function aiMouse(args)
-     local alert
-     local function hide() if alert then hs.alert.closeSpecific(alert); alert = nil end end
-     hs.task.new(PYTHON, hide,
-       function(_, out)
-         if out:find("done") then hide()
-         elseif out:find("thinking") then alert = hs.alert.show("Thinking…", 300) end
-         return true
-       end,
-       args):start()
-   end
-
-   hs.hotkey.bind({"alt", "cmd"}, "A", function() aiMouse({SCRIPT}) end)
-   hs.hotkey.bind({"alt", "cmd"}, "E", function() aiMouse({SCRIPT, "--explain"}) end)
+   dofile(os.getenv("HOME") .. "/Desktop/AI_mouse_agent/hammerspoon.lua")
    ```
 
-   (Use the output of `which python3` if your Python is somewhere else.) Give Hammerspoon **Accessibility** and **Screen Recording** permission, and turn on "Launch Hammerspoon at login" in its settings.
+   (If your Python or this folder is somewhere else, update `PYTHON` and `SCRIPT` at the top of `hammerspoon.lua`.) Give Hammerspoon **Accessibility** and **Screen Recording** permission, and turn on "Launch Hammerspoon at login" in its settings.
 
 ## Usage
 
@@ -74,7 +58,7 @@ Hover over something, then:
 - **⌥⌘A**: type a question (or leave it empty) and press OK.
 - **⌥⌘E**: skip the question and just explain what you're pointing at.
 
-"Thinking…" shows while the AI works, then the answer appears in a popup.
+A small animated orb follows your cursor while the AI works, then the answer appears in a popup.
 
 ## Modes compared
 
@@ -97,3 +81,7 @@ Hover over something, then:
 - **"could not create image from display":** the app running the script (Terminal or Shortcuts) needs Screen Recording permission.
 - **"Couldn't reach Ollama":** start it with `ollama serve`, or open the Ollama app.
 - **"Claude Code failed":** run `claude` once in Terminal to check that you're signed in.
+
+## Credits
+
+The loading orb is the "breathing" animation from [thinking-orbs](https://github.com/Jakubantalik/thinking-orbs) by Jakub Antalik (MIT), ported to Hammerspoon.
