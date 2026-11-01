@@ -87,17 +87,133 @@ local function spinner()
   return function() timer:stop(); c:delete() end
 end
 
-local function aiMouse(args)
-  local stop
-  local function hide() if stop then stop(); stop = nil end end
-  hs.task.new(PYTHON, hide,  -- also hide on exit, in case of a crash
-    function(_, out)
-      if out:find("done") then hide()
-      elseif out:find("thinking") and not stop then stop = spinner() end
-      return true
-    end,
-    args):start()
+-- Top-left for a w×h box beside the cursor point p, flipped to stay on p's screen
+local function besideCursor(p, w, h)
+  local f = hs.mouse.getCurrentScreen():frame()
+  local x, y = p.x + 16, p.y + 16
+  if x + w > f.x + f.w then x = math.max(f.x, p.x - 16 - w) end
+  if y + h > f.y + f.h then y = math.max(f.y, p.y - 16 - h) end
+  return { x = x, y = y, w = w, h = h }
 end
 
-hs.hotkey.bind({ "alt", "cmd" }, "A", function() aiMouse({ SCRIPT }) end)
-hs.hotkey.bind({ "alt", "cmd" }, "E", function() aiMouse({ SCRIPT, "--explain" }) end)
+-- Soft monochrome look to match the orb; follows the system light/dark setting like the orb does
+local STYLE = [[<!doctype html><meta charset="utf-8"><style>
+:root { color-scheme: light dark; --bg: rgba(250,250,250,.86); --ink: rgba(0,0,0,.74); --dim: rgba(0,0,0,.35); --edge: rgba(0,0,0,.08) }
+@media (prefers-color-scheme: dark) { :root { --bg: rgba(24,24,26,.86); --ink: rgba(255,255,255,.80); --dim: rgba(255,255,255,.38); --edge: rgba(255,255,255,.10) } }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden }
+.box { box-sizing: border-box; height: 100%; border-radius: 14px; background: var(--bg); color: var(--ink);
+       box-shadow: inset 0 0 0 .5px var(--edge); font: 12.5px/1.5 -apple-system, sans-serif;
+       animation: in .35s cubic-bezier(.2,.8,.2,1) }
+@keyframes in { from { opacity: 0; transform: scale(.94) } }
+@keyframes breathe { 50% { opacity: .25; transform: scale(.7) } }
+::-webkit-scrollbar { width: 6px } ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px }
+::placeholder { color: var(--dim) }
+</style><script>const post = m => webkit.messageHandlers.aimouse.postMessage(m)</script>]]
+
+local panel, follow, escKey, onClose
+local function closePanel()
+  if follow then follow:stop(); follow = nil end
+  if panel then panel:delete(); panel = nil end
+  if escKey then escKey:delete(); escKey = nil end
+  if onClose then local f = onClose; onClose = nil; f() end
+end
+
+-- Panel that rides beside the cursor like the orb. Hold ⌥ to park it (to select or scroll with the mouse);
+-- it also stays put while the cursor is over it. Page posts {h=} to resize; anything else goes to onMsg.
+local function openPanel(html, w, h, onMsg, closed)
+  closePanel()
+  local size = { w = w, h = h }
+  local uc = hs.webview.usercontent.new("aimouse")
+  uc:setCallback(function(msg)
+    if msg.body.h then size.h = math.min(msg.body.h, 360) else onMsg(msg.body) end
+  end)
+  panel = hs.webview.new(besideCursor(hs.mouse.absolutePosition(), w, h), {}, uc)
+    :windowStyle({ "borderless" })
+    :transparent(true)
+    :allowTextEntry(true)  -- lets it take keyboard focus
+    :shadow(true)
+    :level(hs.drawing.windowLevels.floating)
+    :behaviorAsLabels({ "canJoinAllSpaces", "fullScreenAuxiliary" })  -- also over full-screen apps
+    :html(STYLE .. html)
+    :show()
+  panel:hswindow():focus()
+  onClose = closed
+  escKey = hs.hotkey.bind({}, "escape", closePanel)  -- ponytail: swallows Esc everywhere while a panel is open
+  follow = hs.timer.doEvery(1 / 60, function()
+    local p, f = hs.mouse.absolutePosition(), panel:frame()
+    local over = p.x >= f.x and p.x <= f.x + f.w and p.y >= f.y and p.y <= f.y + f.h
+    if over or hs.eventtap.checkKeyboardModifiers().alt then
+      if f.h ~= size.h then panel:frame({ x = f.x, y = f.y, w = size.w, h = size.h }) end
+    else
+      panel:frame(besideCursor(p, size.w, size.h))
+    end
+  end)
+end
+
+local function htmlEscape(s)
+  return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+
+-- Answer panel. Select with the mouse (hold ⌥ first) or ⌘C to copy, everything if nothing is selected. Esc closes.
+local function showAnswer(text)
+  openPanel([[<style>#b { overflow: auto; padding: 10px 14px; white-space: pre-wrap; cursor: text }</style>
+<div class="box" id="b">]] .. htmlEscape(text) .. [[</div><script>
+post({ h: b.scrollHeight })  // grow to fit, up to 360px, then scroll
+addEventListener("keydown", e => {
+  if (e.metaKey && e.key === "c") post({ copy: String(getSelection()) || b.innerText })
+  if (e.metaKey && e.key === "a") { e.preventDefault(); getSelection().selectAllChildren(b) }
+})
+</script>]], 340, 40, function(m) if m.copy then hs.pasteboard.setContents(m.copy) end end)
+end
+
+-- Question box by the cursor. Calls done(question), or done(nil) on Esc.
+local function askQuestion(done)
+  local sent = false
+  openPanel([[<style>
+.box { display: flex; align-items: center; gap: 9px; padding: 0 14px }
+i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); animation: breathe 2.4s ease-in-out infinite }
+input { flex: 1; border: 0; outline: 0; background: none; color: inherit; font: inherit }
+</style><div class="box"><i></i><input id="q" placeholder="Ask about this… or just press ↵" autofocus></div><script>
+q.focus()
+q.addEventListener("keydown", e => { if (e.key === "Enter") post({ q: q.value }) })
+</script>]], 300, 38,
+    function(m)
+      if sent then return end
+      sent = true
+      hs.timer.doAfter(0, function()  -- not from inside the panel's own callback
+        closePanel()
+        done(m.q ~= "" and m.q or "Explain what I'm pointing at.")
+      end)
+    end,
+    function() if not sent then done(nil) end end)
+end
+
+local function aiMouse(explain)
+  closePanel()
+  local out, err, ready, stop, task = "", "", false, nil, nil
+  local function hide() if stop then stop(); stop = nil end end
+  local function think() if not stop then stop = spinner() end end
+  task = hs.task.new(PYTHON, function(code)
+      hide()
+      local answer = out:gsub("^ready\n", ""):match("^%s*(.-)%s*$")
+      if answer == "" and code ~= 0 and code ~= 15 then answer = "AI Mouse crashed:\n" .. err end  -- 15: we cancelled it
+      if answer ~= "" then showAnswer(answer) end
+    end,
+    function(_, so, se)
+      out, err = out .. (so or ""), err .. (se or "")
+      if not ready and out:find("^ready\n") then  -- screenshot taken, safe to draw on screen
+        ready = true
+        if explain then think() else
+          askQuestion(function(q)
+            if q then task:setInput(q .. "\n"); think() else task:terminate() end
+          end)
+        end
+      end
+      return true
+    end,
+    explain and { SCRIPT, "--explain" } or { SCRIPT })
+  task:start()
+end
+
+hs.hotkey.bind({ "alt", "cmd" }, "A", function() aiMouse(false) end)
+hs.hotkey.bind({ "alt", "cmd" }, "E", function() aiMouse(true) end)

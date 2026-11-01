@@ -35,6 +35,8 @@ No extra Python packages are needed.
    python3 ~/Desktop/AI_mouse_agent/ask.py
    ```
 
+   Type your question and press Return (empty = just explain). The answer prints in Terminal.
+
    The first time, macOS asks for **Screen Recording** permission. Allow it in System Settings → Privacy & Security → Screen Recording, then run it again.
 
 3. **Add hotkeys (⌥⌘A, ⌥⌘E) with [Hammerspoon](https://www.hammerspoon.org).** It works in every app, including Chrome and full-screen apps, which the Shortcuts app's hotkeys don't.
@@ -55,10 +57,10 @@ No extra Python packages are needed.
 
 Hover over something, then:
 
-- **⌥⌘A**: type a question (or leave it empty) and press OK.
+- **⌥⌘A**: a small question box appears by the cursor. Type a question (or leave it empty) and press Return. Esc cancels.
 - **⌥⌘E**: skip the question and just explain what you're pointing at.
 
-A small animated orb follows your cursor while the AI works, then the answer appears in a popup.
+A small animated orb follows your cursor while the AI works, then the answer appears in a panel that follows the cursor. Press ⌘C to copy it all, or hold ⌥ to park the panel so you can move onto it to select text or scroll. Esc closes it.
 
 ## Modes compared
 

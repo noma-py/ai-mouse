@@ -24,18 +24,8 @@ SYSTEM = (
 )
 
 
-def osa(script):
-    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip()
-
-
-def quote(s):
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
 def show(text):
-    print("done", flush=True)  # hides "Thinking…" before the answer pops up
-    osa(f'display dialog {quote(text)} with title "AI Mouse" buttons {{"OK"}} default button "OK"')
+    print(text, flush=True)  # Hammerspoon shows stdout in a panel by the cursor
 
 
 def ask_model(question, image_b64):
@@ -77,18 +67,14 @@ def main():
              "this from there) in the settings window that just opened, then try again.")
         return
     subprocess.run(["sips", "-Z", "1568", img], check=True, capture_output=True)
+    print("ready", flush=True)  # screenshot taken: Hammerspoon can now show the question box
 
-    if "--explain" in sys.argv:  # one-press mode: skip the question box
-        question = "Explain what I'm pointing at."
-    else:
-        code, out = osa(
-            'text returned of (display dialog "What do you want explained?" '
-            'default answer "" with title "AI Mouse")'
-        )
-        if code != 0:  # user hit Cancel
+    question = "Explain what I'm pointing at."
+    if "--explain" not in sys.argv:  # one-press mode skips the question
+        line = sys.stdin.readline()  # Hammerspoon sends the question here
+        if not line:  # stdin closed: question box cancelled
             return
-        question = out or "Explain what I'm pointing at."
-    print("thinking", flush=True)  # the Hammerspoon hotkey shows "Thinking…" when it sees this
+        question = line.strip() or question
 
     if BACKEND == "claude":
         try:
